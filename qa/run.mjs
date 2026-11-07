@@ -172,6 +172,17 @@ try {
     check("遊び方を Esc で閉じたあと、開き直しても遊び方が出ない", closed && (await mem(q)).tut === true && await q.locator("#howto[open]").count() === 0);
     await q.context().close();
   }
+  {
+    // cancel（Esc）のその場で保存する。close を待たずに見る。保存に失敗したら close でもう一度保存する（CodeRabbit の指摘）
+    const q = await newPage();
+    const atCancel = await q.evaluate(() => { const d = document.getElementById("howto"); d.dispatchEvent(new Event("cancel")); return JSON.parse(localStorage.getItem("miyaburi-v1") || "{}").tut === true; });
+    check("遊び方を Esc で閉じたその場（close の前）に「見た」を保存する", atCancel);
+    await q.context().close();
+    const q2 = await newPage();
+    const retried = await q2.evaluate(() => { const ls = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; const d = document.getElementById("howto"); d.dispatchEvent(new Event("cancel")); Storage.prototype.setItem = ls; const before = JSON.parse(localStorage.getItem("miyaburi-v1") || "{}").tut === true; d.close(); return new Promise((res) => setTimeout(() => res(!before && JSON.parse(localStorage.getItem("miyaburi-v1") || "{}").tut === true), 100)); });
+    check("Esc のときの保存に失敗しても、閉じたときに「見た」を保存し直す", retried);
+    await q2.context().close();
+  }
   const p = await newPage();
   check("はじめて開くと遊び方が出る", await p.locator("#howto[open]").count() === 1);
   await p.click("#howto-ok");
