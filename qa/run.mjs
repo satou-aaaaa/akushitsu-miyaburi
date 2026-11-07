@@ -160,6 +160,15 @@ async function solve(p, { wrong = 0 } = {}) {
 }
 
 try {
+  {
+    // 遊び方を Esc で閉じても覚える（okane-kihon で見つかった。shared-workflows #186）
+    const q = await newPage();
+    await q.keyboard.press("Escape"); await q.waitForTimeout(150);
+    const closed = await q.locator("#howto[open]").count() === 0;
+    await q.click("#go-p"); await q.goto(url); await q.waitForTimeout(200);
+    check("遊び方を Esc で閉じたあと、開き直しても遊び方が出ない", closed && (await mem(q)).tut === true && await q.locator("#howto[open]").count() === 0);
+    await q.context().close();
+  }
   const p = await newPage();
   check("はじめて開くと遊び方が出る", await p.locator("#howto[open]").count() === 1);
   await p.click("#howto-ok");
