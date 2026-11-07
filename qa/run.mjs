@@ -9,6 +9,7 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { checkTransfer } from "./transfer-check.mjs";
+import { checkSwStall } from "./sw-check.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const results = [];
@@ -123,6 +124,8 @@ check("引き継ぎ：transfer.js をゲームの script より前に、この�
   check("感想フォームの name が3字以上（2字だとフォームが出ない。shared-workflows incidents/2026-11-05-feedback-form-not-shown.md）", [...((fy.match(/^name:\s*(.+)$/m) || [])[1] || "").trim()].length >= 3);
   check("感想フォームは名前・メールを聞かない", /id: fun/.test(fy) && !/id: (name|email|mail)/.test(fy) && /labels: \["感想"\]/.test(fy)); }
 check("README の URL のすぐ後ろに全角の字を続けない（Link check が URL の一部と読む）", !/https?:\/\/[\x21-\x7e]*[^\x00-\x7f]/.test(readme.replace(/\]\(https?:\/\/[^)\s]+\)/g, "").replace(/<https?:\/\/[^>\s]+>/g, "")));
+{ const st = await checkSwStall(readFileSync(path.join(root, "sw.js"), "utf8"));
+  check("PWA：本文の途中で通信が止まっても、4秒で保存した画面を返す（shared-workflows template/qa/sw-check.mjs）", st.ok, JSON.stringify(st)); }
 { const sw = readFileSync(path.join(root, "sw.js"), "utf8"), mf = JSON.parse(readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
   const shell = JSON.parse(sw.match(/SHELL = (\[[^\]]+\])/)[1]);
   check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js も）、取り直して入れ、外へ何も送らない", ["./index.html", "./data.js", "./transfer.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].every((f) => shell.includes(f)) && /cache: "reload"/.test(sw) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));

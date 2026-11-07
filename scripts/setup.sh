@@ -3,14 +3,16 @@
 #   使い方: bash scripts/setup.sh   （Windows は Git Bash で）
 # Claude Code のクラウドセッションでは .claude/settings.json の SessionStart フックが自動で呼ぶ。
 # CI の Setup check（共通部品）が、まっさらな環境でこれが通るかを確かめる。
-# ひな形: satou-aaaaa/shared-workflows の template/scripts/setup.sh。（Python の節は使わないので消した）
-# ひな形の版: 5（上げたら写しの版も上げる。scripts/drift-check.mjs が古い写しを週次まとめに出す）
+# ひな形: satou-aaaaa/shared-workflows の template/scripts/setup.sh。ゲームはそのまま写せば動く（npm_dir と next だけ、ちがえば書き換える）。（Python の節は使わないので消した）
+# ひな形の版: 6（上げたら写しの版も上げる。scripts/drift-check.mjs が古い写しを週次まとめに出す）
 #   2: 依存は毎回 npm ci・ブラウザが無ければ止める・このシェルで要る操作（nvm use・export）を最後に出す（shared-workflows incidents/2026-11-03-setup-false-ready.md）
 #   3: nvm.sh を --no-use で読む（.nvmrc の版が入っていないと、読んだだけで何も言わずに止まっていた。incidents/2026-11-04-setup-nvm-silent-stop.md）
 #   4: ブラウザの場所はファイルかも見る（-x だけだとフォルダでも通った。2026-11-05 CodeRabbit が bunshi-tsukuri #1 で指摘）
 #   5: 依存は lock と Node の版が同じで npm ls が通れば入れ直さない（QA の最中に npm ci が node_modules を消していた）・
 #      渡すブラウザの場所を空白があっても切れないよう引用する・最後にブラウザを本当に起動してみる（Linux のライブラリ不足・
 #      合わない版・ダウンロード後の CHROMIUM_PATH を見逃していた）・nvm use の前に nvm.sh を読み込む案内を出す（incidents/2026-11-07-game-template-review-gaps.md）
+#   6: 埋める <> を無くし、そのまま写して動く形にした・Python の節は requirements.txt があるときだけ動く（写し残すと pip で止まっていた）・
+#      NODE_ENV=production でも devDependencies（playwright）を入れる（2026-11-07 kikigaki-techo の Setup check・gogen-suiri #1 の CodeRabbit）
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -25,7 +27,8 @@ session_env() {
 }
 q() { printf '%q' "$1"; }   # シェルにそのまま貼れる形にする（空白のある場所で切れないように。版5）
 
-npm_dir=qa
+npm_dir=qa   # package.json のあるフォルダ（ゲームは qa。ちがえば . などに書き換える）
+[ -f "$npm_dir/package.json" ] || fail "$npm_dir/package.json が無い（scripts/setup.sh の npm_dir= を package.json のあるフォルダにする）"
 
 # --- Node.js（版は .nvmrc。nvm・fnm・mise・Volta などはこのファイルを読む）---
 want=$(tr -dc '0-9' < .nvmrc)
@@ -49,10 +52,10 @@ node_ok || fail "Node.js $want 以上が要る（今は $(node -v 2>/dev/null ||
 # 毎回 npm ci すると、QA の最中に node_modules を消して QA を落とす（版5）。QA を回している間は、このスクリプトを動かさない
 stamp="$npm_dir/node_modules/.setup-stamp"
 sum=$( { node -v; cat "$npm_dir/package-lock.json"; } | cksum )
-if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$sum" ] && (cd "$npm_dir" && npm ls --all >/dev/null 2>&1); then
+if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$sum" ] && (cd "$npm_dir" && npm ls --all --include=dev >/dev/null 2>&1); then
   echo "依存は lock どおりに入っている（入れ直さない）"
 else
-  (cd "$npm_dir" && npm ci --no-audit --no-fund)
+  (cd "$npm_dir" && npm ci --include=dev --no-audit --no-fund)   # NODE_ENV=production でも検査の道具（devDependencies）を入れる（版6）
   echo "$sum" > "$stamp"
 fi
 
@@ -88,8 +91,7 @@ if ! err=$(cd "$npm_dir" && node -e '
 $err"
 fi
 
-
-next="node qa/run.mjs"
+next="node qa/run.mjs"   # push する前の確認コマンド（ちがえば書き換える）
 if [ ${#todo[@]} -gt 0 ]; then
   echo "△ 準備はできた。ただし、このシェルで先に次を打つ（打たないと古い Node や別のブラウザで動く）:"
   printf '    %s\n' "${todo[@]}"
