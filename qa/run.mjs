@@ -205,6 +205,7 @@ try {
   await p.waitForTimeout(150);
   const s1 = await mem(p);
   check("5件で結果：今日の記録に1件ごとのまちがい（1・2・0・0・0）", JSON.stringify(s1.days[TODAY]?.m) === "[1,2,0,0,0]");
+  check("今日の記録に解いた問題の札も残す（あとで相談が増えても結果に元の問題を出す）", JSON.stringify(s1.days[TODAY]?.l) === JSON.stringify(tags));
   const share = await p.textContent(".share");
   check("シェアの文に相談の中身・答えを出さない（印だけ）", /第\d+回/.test(share) && /🟢/.test(share) && !G.TE.some((t) => share.includes(t.name)) && !/クーリング|月\d+日/.test(share), share);
   check("まちがいのある日は Ko-fi の一言を出さない", await p.locator(".kofi").count() === 0);
@@ -266,6 +267,22 @@ try {
     check("記録の文字を HTML として出さない", await q.locator("#xss, #xss2, #xss3, #xss4").count() === 0);
     await q.context().close();
   }
+  {
+    // 引き継ぎで入った記録：件数の合わない日の記録・置き場とモードが合わない途中経過・終えたとことんの回は捨てる
+    const q = await newPage(); await closeHow(q);
+    const d1 = dayBefore(1), d2 = dayBefore(2), lt = G.dailyTags(d2);
+    await q.evaluate(([d1, d2, lt]) => { localStorage.setItem("miyaburi-v1", JSON.stringify({ v: 1, tut: true, days: { [d1]: { m: [0] }, [d2]: { m: [0, 0, 0, 0, 0], l: lt } }, hdays: { [d1]: { m: [0, 0, 0] }, [d2]: { m: [0, 0, 0, 0, 0] } }, adays: {}, dex: {}, co: 0, miss: [], kofi: {}, ach: {}, ebest: 0, edone: ["E1"],
+      runs: { d: { id: "x", date: d1, list: ["a:tk1"], res: [] }, ["a:" + d2]: { mode: "a", id: "y", date: d1, list: ["a:tk1"], res: [] }, e: { mode: "e", id: "E1", date: d1, list: ["a:tk1"], res: [] }, h: { mode: "d", id: "z", date: d1, list: ["a:tk1"], res: [] } } })); }, [d1, d2, lt]);
+    await q.reload(); await q.waitForTimeout(200);
+    const st = await q.evaluate(() => __mb.load());
+    check("件数の合わない日の記録は捨てる（今日・あとから5件、上級3件）", !st.days[d1] && st.days[d2] && st.hdays[d1] && !st.hdays[d2]);
+    check("置き場とモードが合わない途中経過・終えたとことんの回は捨てる", Object.keys(st.runs).length === 0, JSON.stringify(Object.keys(st.runs)));
+    // 二択の問題はヒント1回まで（2回目で星だけ減らない）
+    await q.evaluate(() => { const s = __mb.load(); s.runs.p = { mode: "p", id: "P1", date: "2026-11-07", list: ["j:j1"], res: [], cur: null }; __mb.save((x) => { x.runs = s.runs; }); __mb.play("p"); });
+    await q.waitForTimeout(100); await q.click("#hint");
+    check("二択の問題はヒント1回で、ヒントのボタンを止める", await q.locator(".ch").count() === 2 && await q.locator("#hint:disabled").count() === 1);
+    await q.context().close();
+  }
   // 実績・このゲームについて
   await p.goto(url); await p.waitForTimeout(150); await p.click("#go-ach");
   check("実績は14個で、腕前・集める・続けるの3つの組・まだのものは いま/目標", await p.locator(".ach").count() === 14 && await p.locator(".agrp").count() === 3 && await p.locator(".ach.got").count() >= 3 && await p.locator(".ach:not(.got) .bar").count() >= 5);
@@ -288,7 +305,9 @@ try {
   {
     const q = await newPage(); await closeHow(q);
     const a = await q.locator(".kofi").count(); await q.click("#go-d"); const b = await q.locator(".kofi").count();
-    check("遊ぶ前・途中には Ko-fi の一言を出さない（下のリンクだけ）", a === 0 && b === 0);
+    check("遊ぶ前・途中には Ko-fi の一言を出さない", a === 0 && b === 0);
+    await q.click("#back").catch(() => {}); await q.waitForTimeout(100);
+    check("ホームの下にも Ko-fi のリンクを出さない（結果の画面だけ）", await q.locator('a[href*="ko-fi"]').count() === 0);
     await q.context().close();
   }
 
@@ -329,6 +348,8 @@ try {
     await a.click("#hint"); await a.click("#hint");
     await b.click("#hint");
     check("別のタブで使ったヒントの数を減らさない", (await mem(a)).runs.d.cur.hints === 2);
+    await b.click(`.ch[data-j="${await ansIdx(b)}"]`); await b.waitForTimeout(150);
+    check("別のタブでヒントを使ったあと、こちらで正解しても星を多く付けない", (await mem(a)).runs.d.res[1].m >= 2);
     await ctx.close();
   }
 

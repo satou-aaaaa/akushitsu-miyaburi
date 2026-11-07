@@ -394,7 +394,7 @@ const fresh = () => ({ v: 1, days: {}, hdays: {}, adays: {}, dex: {}, co: 0, mis
 const OBJ = ["days", "hdays", "adays", "dex", "runs", "kofi", "ach"];
 let MODE = "d";
 let mem = null; // 保存できない環境では、開いているあいだだけここに置く
-const doneOf = (r) => !!r && r.mode !== "e" && r.res.length >= r.list.length, recOf = (r) => ({ m: r.res.map((x) => x.m) });
+const doneOf = (r) => !!r && r.mode !== "e" && r.res.length >= r.list.length, recOf = (r) => ({ m: r.res.map((x) => x.m), l: r.list.slice() }); // l：解いた問題の札（あとで相談が増えても、結果に元の問題を出す）
 const runKey = (mode, date) => (mode === "a" ? "a:" + date : mode);
 const bookOf = (s, m) => (m === "d" ? s.days : m === "h" ? s.hdays : m === "a" ? s.adays : null);
 // 終わった回を日ごとの記録に入れる（結果を見る前に閉じても、別のタブが次の日を保存しても、終えた日を失わない）
@@ -437,10 +437,14 @@ function tidy(s) {
   s.miss = Array.isArray(s.miss) ? s.miss.filter(G.ok).slice(-12) : [];
   s.edone = Array.isArray(s.edone) ? s.edone.filter((x) => typeof x === "string").slice(-20) : [];
   for (const k in s.dex) if (!G.BYTE[k]) delete s.dex[k]; else s.dex[k] = num(s.dex[k]);
-  const okRec = (x) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.every((v) => Number.isInteger(v) && v >= 0);
-  for (const b of [s.days, s.hdays, s.adays]) for (const d in b) if (!okDate(d) || !okRec(b[d])) delete b[d];
+  // 今日の5件・あとからは5件、上級は3件の記録だけを残す（足りない記録で「全部見抜いた」にしない）
+  const okRec = (x, n) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.length === n && x.m.every((v) => Number.isInteger(v) && v >= 0) && (x.l === undefined || (Array.isArray(x.l) && x.l.length === n && x.l.every(G.ok)));
+  for (const [b, n] of [[s.days, 5], [s.hdays, 3], [s.adays, 5]]) for (const d in b) if (!okDate(d) || !okRec(b[d], n)) delete b[d];
   for (const m in s.runs) {
     const r = s.runs[m]; if (r === null) continue;
+    // 置き場の名前とモードが合わない途中経過・終えたとことんの回は捨てる
+    const want = /^[dhpe]$/.test(m) ? m : /^a:/.test(m) ? "a" : null;
+    if (!r || typeof r !== "object" || r.mode !== want || (want === "a" && r.date !== m.slice(2)) || (want === "e" && s.edone.includes(r.id))) { delete s.runs[m]; continue; }
     if (typeof r !== "object" || typeof r.id !== "string" || !okDate(r.date) || !Array.isArray(r.list) || !r.list.length || !r.list.every(G.ok) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0)) { delete s.runs[m]; continue; }
     if (r.cur != null && (typeof r.cur !== "object" || !Array.isArray(r.cur.wrong) || !r.cur.wrong.every((w) => Number.isInteger(w)))) r.cur = null; else if (r.cur) r.cur.hints = num(r.cur.hints);
     if (r.mode === "e") { r.first = num(r.first); r.miss = num(r.miss); }
@@ -494,7 +498,7 @@ const buzz = (n = 12) => { try { if (!(window.A11y && A11y.on("calm"))) navigato
 const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const toTop = () => window.scrollTo(0, 0);
 // 引き継ぎ（transfer.js）の画面は data-hk のリンクから出す
-const footer = () => `<footer><a href="#" id="f-how">遊び方</a><a href="#" id="f-about">このゲームについて</a><a href="#" data-a11y-open>見やすさ</a><a href="#" data-hk>引き継ぎ</a><a href="${FEEDBACK}" target="_blank" rel="noopener">感想を送る</a><a href="https://ko-fi.com/satouaaaaa" target="_blank" rel="noopener">Ko-fi で応援</a></footer>`;
+const footer = () => `<footer><a href="#" id="f-how">遊び方</a><a href="#" id="f-about">このゲームについて</a><a href="#" data-a11y-open>見やすさ</a><a href="#" data-hk>引き継ぎ</a><a href="${FEEDBACK}" target="_blank" rel="noopener">感想を送る</a></footer>`;
 function bindFooter() { const h = $("f-how"); if (h) h.onclick = (e) => { e.preventDefault(); openHow(); }; const a = $("f-about"); if (a) a.onclick = (e) => { e.preventDefault(); about(); }; }
 function openHow() { $("fb2").href = FEEDBACK; const d = $("howto"); if (d.showModal) { if (!d.open) d.showModal(); } else d.setAttribute("open", ""); }
 $("howto-ok").onclick = () => { const d = $("howto"); d.close ? d.close() : d.removeAttribute("open"); save((s) => { s.tut = true; }); };
@@ -610,14 +614,14 @@ function play() {
     <div class="card${P.type === "d" ? " co" : ""}">
       <div class="who"><span class="ava" aria-hidden="true">${P.ava}</span><p class="bubble" data-a11y-say><span class="nm">${esc(P.nm)}</span>${esc(P.s)}</p></div>
       ${P.type === "d" ? mcal(P, false) : ""}
-      <p class="q" id="q">${esc(P.q)}</p>
+      <p class="q" id="q" data-a11y-say>${esc(P.q)}</p>
     </div>
-    <div class="choices${cls}" id="choices">${P.opts.map((t, j) => `<button class="ch" data-j="${j}"><span class="no" aria-hidden="true">${"ABCD"[j]}</span><span>${esc(t)}</span></button>`).join("")}</div>
-    <p class="msg" id="msg" role="status" aria-live="polite"></p>
-    <div id="hintbox"></div>
+    <div class="choices${cls}" id="choices" data-a11y-say>${P.opts.map((t, j) => `<button class="ch" data-j="${j}"><span class="no" aria-hidden="true">${"ABCD"[j]}</span><span>${esc(t)}</span></button>`).join("")}</div>
+    <p class="msg" id="msg" role="status" aria-live="polite" data-a11y-say></p>
+    <div id="hintbox" data-a11y-say></div>
     ${hard ? "" : `<button class="sub" id="hint">ヒント</button>`}
     ${run.mode === "e" ? `<p class="note">まちがえても、ヒントを使っても続きます。一度で正解した件数が記録になります。</p><button class="sub" id="quit">ここで降りる（${i}件で終える）</button>` : ""}
-    <div id="after"></div>`;
+    <div id="after" data-a11y-say></div>`;
   $("back").onclick = home;
   document.querySelectorAll(".ch").forEach((b) => (b.onclick = () => choose(+b.dataset.j)));
   if ($("hint")) $("hint").onclick = hint;
@@ -626,14 +630,16 @@ function play() {
   toTop();
 }
 // ヒント2：まちがいの選び肢を1つ消す（消す順は選び肢の並びの順）
+// 2回目のヒントは、消せるまちがいの選び肢が2つ以上あるときだけ（二択では1回まで）
+const hmax = () => (cur.hints >= 2 || cur.P.opts.filter((_, j) => j !== cur.P.ans && !cur.wrong.includes(j)).length > 1 ? 2 : 1);
 const cutOf = () => { if (cur.hints < 2) return []; const left = cur.P.opts.map((_, j) => j).filter((j) => j !== cur.P.ans && !cur.wrong.includes(j)); return left.length > 1 ? left.slice(0, 1) : []; };
 function paint() {
   const cut = cutOf();
   document.querySelectorAll(".ch").forEach((b) => { const j = +b.dataset.j, ng = cur.wrong.includes(j) || cut.includes(j); b.classList.toggle("ng", ng); b.disabled = ng || cur.done; b.setAttribute("aria-label", cur.P.opts[j] + (ng ? "（ちがう）" : "")); });
-  const h = $("hint"); if (h) h.disabled = cur.done || cur.hints >= 2;
+  const h = $("hint"); if (h) h.disabled = cur.done || cur.hints >= hmax();
   $("hintbox").innerHTML = cur.hints && !cur.done ? `<div class="hint" role="status">💡 ${esc(cur.P.look)}${cur.hints >= 2 ? "<br>💡 ちがう選び肢を1つ消しました。" : ""}</div>` : "";
 }
-function hint() { if (cur.done || cur.hints >= 2) return; if (!same(load().runs[MODE])) { toast("別の画面で先に進んでいます"); return play(); } cur.hints++; keep(); paint(); }
+function hint() { if (cur.done || cur.hints >= hmax()) return; if (!same(load().runs[MODE])) { toast("別の画面で先に進んでいます"); return play(); } cur.hints++; keep(); paint(); }
 function choose(j) {
   if (cur.done) return;
   if (!same(load().runs[MODE])) { toast("別の画面で先に進んでいます"); return play(); }
@@ -648,16 +654,19 @@ function choose(j) {
   }
   // 正解
   cur.done = true; buzz([10, 40, 10]);
-  const m = missOf(), st = starsOf(m);
+  let m = missOf();
   const s = save((s) => {
     const r = s.runs[MODE]; if (!same(r)) return;
+    // 別のタブで使ったヒント・まちがいも数に入れる（星を多く付けない）
+    const was = r.cur && r.cur.i === cur.i && r.cur.tag === cur.tag ? r.cur : null;
+    if (was) { cur.hints = Math.max(cur.hints, num(was.hints)); for (const w of was.wrong || []) if (!cur.wrong.includes(w) && w !== P.ans) cur.wrong.push(w); m = missOf(); }
     r.res.push({ m }); r.cur = null;
     if (P.te) s.dex[P.te] = (s.dex[P.te] || 0) + 1;
     if (P.type === "j" || P.type === "d") s.co = (s.co || 0) + 1;
     if (r.mode === "e") { if (m === 0) r.first = (r.first || 0) + 1; else r.miss = (r.miss || 0) + 1; }
     if (r.rev && m === 0) s.miss = s.miss.filter((t) => t !== P.tag); // おさらいで一度で正解したら、おさらいから外す
   });
-  const r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length;
+  const st = starsOf(m), r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length;
   document.querySelectorAll(".ch").forEach((b) => { b.disabled = true; if (+b.dataset.j === P.ans) { b.classList.add("ok"); b.setAttribute("aria-label", P.opts[P.ans] + "（正解）"); } });
   if (P.type === "d") $("mcal").outerHTML = mcal(P, true);
   if ($("hint")) $("hint").disabled = true;
@@ -670,7 +679,7 @@ function choose(j) {
     ${te ? `<p class="te"><b>${te.icon} ${esc(te.name)}</b>：${esc(te.lead)}</p>` : ""}
     <button class="main ok" id="next">${fin ? "結果を見る" : "次の相談へ"}</button></div>`;
   $("next").onclick = play;
-  setTimeout(() => { if ($("next") && cur && cur.done && cur.tag === P.tag) $("next").scrollIntoView({ behavior: "smooth", block: "nearest" }); }, 60);
+  setTimeout(() => { if ($("next") && cur && cur.done && cur.tag === P.tag) $("next").scrollIntoView({ behavior: window.A11y && A11y.on("calm") ? "auto" : "smooth", block: "nearest" }); }, 60);
 }
 
 function finish() {
@@ -718,7 +727,7 @@ function untilNext() { const n = jstNow(), ms = 864e5 - (n.getTime() % 864e5); r
 function result(mode, k, first, prec, newAch = []) {
   const s = load(), rec = mode === "p" ? prec : bookOf(s, mode)[k];
   if (!rec) return home();
-  const list = mode === "p" ? prec.list : listOf(mode, k), total = rec.m.reduce((a, b) => a + b, 0), late = mode === "a", text = shareText(mode, k, rec);
+  const list = mode === "p" ? prec.list : Array.isArray(rec.l) && rec.l.length === rec.m.length ? rec.l : listOf(mode, k), total = rec.m.reduce((a, b) => a + b, 0), late = mode === "a", text = shareText(mode, k, rec);
   const showKofi = first && mode !== "p" && !late && total === 0 && !s.kofi[k + mode]; // あとから・練習・まちがいのある日には出さない
   if (showKofi) save((s2) => { s2.kofi[k + mode] = 1; });
   app.innerHTML = `
