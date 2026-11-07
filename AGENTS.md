@@ -31,6 +31,7 @@ node qa/run.mjs   # データの形・字数・出典・日付の問題（3000�
 - 外へ通信しない。外から読むのは Google Fonts の文字だけ（CSP の `connect-src 'self'` を広げない）。
 - 見やすさ：`</head>` の前の `<!-- a11y:begin -->`〜`end` は shared-workflows `template/a11y/a11y.html` の写し、`qa/a11y.mjs` は `template/qa/a11y.mjs` の写しで、ここでは直さない。色だけで分けない（正解 ✓・まちがい ✕ と破線・星は ☆・カレンダーは ★ ↺ ▲・日付の問題の数えた日は番号と「最後」）。知らせは `#msg`（role=status）と `.verdict`。
 - 引き継ぎ：`transfer.js` と `qa/transfer-check.mjs` は shared-workflows `template/` の写し。`data-keys` は `miyaburi-v1`。
+- 大きく出てから縮む・揺れる動き（判の `stamp` など）は、入れ物に `overflow:hidden` を付けて横にはみ出させない（2026-11-07 CI でだけ 5px はみ出した。QA が動きの途中も測る）。
 - 一行に書いた処理の途中にコメント `//` を足さない。機能を足す・直すたびに `qa/run.mjs` に検査を足す。乱数で組む部分は何百回・何年分も作って確かめる（shared-workflows `incidents/2026-10-31-roppo-empty-village.md`）。
 - PWA（`manifest.webmanifest`・`sw.js`・`icon-*.png`）：画面のファイルを足したら `sw.js` の `SHELL` に足し、中身や取り方を変えたら `CACHE` の版を上げる。アイコンは `node tools/make-icons.cjs`、SNS 用の絵 `og.png` は `node tools/make-og.cjs`（今日の相談を入れない）。
 - 公開リポジトリなので、個人情報・鍵を入れない。

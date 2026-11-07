@@ -369,7 +369,8 @@ try {
     for (const w of [320, 390]) {
       const q = await newPage(w); await closeHow(q);
       for (const go of [null, "#go-d", "solve", "#go-cal", "#go-dex", "#go-ach", "#go-e", "#go-p"]) {
-        if (go === "solve") { await solve(q); }
+        // 判を押す動き（大きく出てから縮む）の途中でも横にはみ出さない（2026-11-07 CI でだけ 5px はみ出した）
+        if (go === "solve") { await solve(q); for (const t of [0, 60, 120, 200]) { const o = await q.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth); if (o > 0) bad.push(`${w}px 判の動き${t}ms ${o}px`); await q.waitForTimeout(60); } }
         else if (go) { await q.goto(url); await q.waitForTimeout(100); await q.click(go); }
         await q.waitForTimeout(100);
         const ov = await q.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
