@@ -206,9 +206,13 @@ try {
   check("ヒント1は見るところを言う（選び肢は消さない）", (await p.textContent("#hintbox")).includes("💡") && await p.locator(".ch.ng").count() === 0);
   await p.click("#hint");
   check("ヒント2はまちがいの選び肢を1つ消す・ヒントは2回まで", await p.locator(".ch.ng").count() === 1 && await p.locator("#hint:disabled").count() === 1);
+  for (let k = 0; k < 3; k++) await p.evaluate(() => { const c = __mb.cur(), b = [...document.querySelectorAll(".ch:not(:disabled)")].find((x) => +x.dataset.j !== c.P.ans); if (b) b.click(); });
+  await p.waitForTimeout(50);
+  check("ヒント2のあとに残ったまちがいを全部選ぶと、正解だけが残る（消した選び肢が戻らない。shared-workflows incidents/2026-11-07-hint-cut-comes-back.md）", await p.locator(".ch:not(:disabled)").count() === 1);
   await solve(p);
   check("ヒント2回は★1", (await p.getAttribute(".verdict .stars", "aria-label")) === "星1つ");
   await p.click("#next");
+  check("次の相談へ進むと、フォーカスが問い（#q）に移る", await p.evaluate(() => document.activeElement && document.activeElement.id) === "q");
   // 3件目は日付の問題：カレンダーが出て、答えると数えた日に番号
   check("日付の問題はカレンダーと「受」の印・選び肢4つ", await p.locator("#mcal .st").count() === 1 && await p.locator(".ch").count() === 4);
   await solve(p);
@@ -218,7 +222,7 @@ try {
   for (let i = 3; i < 5; i++) { await solve(p); await p.click("#next"); }
   await p.waitForTimeout(150);
   const s1 = await mem(p);
-  check("5件で結果：今日の記録に1件ごとのまちがい（1・2・0・0・0）", JSON.stringify(s1.days[TODAY]?.m) === "[1,2,0,0,0]");
+  check("5件で結果：今日の記録に1件ごとのまちがい（1・3以上・0・0・0。2件目はヒント2回のあとまちがいを選んだ）", (([a, b, ...r]) => a === 1 && b >= 3 && r.join() === "0,0,0")(s1.days[TODAY]?.m || []), JSON.stringify(s1.days[TODAY]?.m));
   check("今日の記録に解いた問題の札も残す（あとで相談が増えても結果に元の問題を出す）", JSON.stringify(s1.days[TODAY]?.l) === JSON.stringify(tags));
   const share = await p.textContent(".share");
   check("シェアの文に相談の中身・答えを出さない（印だけ）", /第\d+回/.test(share) && /🟢/.test(share) && !G.TE.some((t) => share.includes(t.name)) && !/クーリング|月\d+日/.test(share), share);
