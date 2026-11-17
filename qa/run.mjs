@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { checkTransfer } from "./transfer-check.mjs";
 import { checkSwStall } from "./sw-check.mjs";
+import { checkDepth } from "./depth-check.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const results = [];
@@ -116,7 +117,7 @@ check("法律相談にしない：「このゲームについて」に法律相�
 check("チケット・回数制限・🔒で開くモードを入れない（好きなだけ遊べる）", !/🎫|チケット|🔒|すると開く|あとで開く|スタミナ|回復まで/.test(html));
 check("画面にお笑いの言葉を入れない（本物っぽく）", !/お笑い|ギャグ|ツッコミ|なんでやねん|（うそ）|ｗｗ/.test(html + data));
 check("実在の会社名・人名・ブランドを出さない（人物は名字＋年代だけ）", !/株式会社|有限会社|Amazon|楽天|メルカリ|LINEヤフー/.test(data));
-check("引き継ぎ：transfer.js をゲームの script より前に、このゲームの記録のキーだけで読む", /<script src="transfer\.js" data-game="akushitsu-miyaburi" data-keys="miyaburi-v1"><\/script>\s*<\/head>/.test(html) && html.indexOf('src="transfer.js"') < html.indexOf('src="data.js"') && /data-hk/.test(html) && existsSync(path.join(root, "transfer.js")));
+check("引き継ぎ：transfer.js をゲームの script より前に、このゲームの記録のキー（記録・復習）だけで読む・depth.js も前に読む", /<script src="transfer\.js" data-game="akushitsu-miyaburi" data-keys="miyaburi-v1,miyaburi-depth"><\/script>\s*<script src="depth\.js" data-game="akushitsu-miyaburi" data-key="miyaburi-depth"><\/script>\s*<\/head>/.test(html) && html.indexOf('src="transfer.js"') < html.indexOf('src="data.js"') && /data-hk/.test(html) && existsSync(path.join(root, "transfer.js")));
 { const og = (k) => (html.match(new RegExp(`<meta (?:property|name)="${k}" content="([^"]+)"`)) || [])[1] || "";
   const png = readFileSync(path.join(root, "og.png"));
   check("SNS で貼ると絵と題が出る（OGP・1200×630・絶対URL）", og("og:title") && og("og:description") && og("og:image") === "https://satou-aaaaa.github.io/akushitsu-miyaburi/og.png" && og("twitter:card") === "summary_large_image" && png.readUInt32BE(16) === 1200 && png.readUInt32BE(20) === 630); }
@@ -128,7 +129,7 @@ check("README の URL のすぐ後ろに全角の字を続けない（Link check
   check("PWA：本文の途中で通信が止まっても、4秒で保存した画面を返す（shared-workflows template/qa/sw-check.mjs）", st.ok, JSON.stringify(st)); }
 { const sw = readFileSync(path.join(root, "sw.js"), "utf8"), mf = JSON.parse(readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
   const shell = JSON.parse(sw.match(/SHELL = (\[[^\]]+\])/)[1]);
-  check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js も）、取り直して入れ、外へ何も送らない", ["./index.html", "./data.js", "./transfer.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].every((f) => shell.includes(f)) && /cache: "reload"/.test(sw) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
+  check("PWA：sw.js は画面のファイルを全部保存し（引き継ぎの transfer.js・深さの depth.js も）、取り直して入れ、外へ何も送らない", ["./index.html", "./data.js", "./transfer.js", "./depth.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"].every((f) => shell.includes(f)) && /cache: "reload"/.test(sw) && !/https?:\/\//.test(sw.replace(/^\/\/.*$/gm, "")));
   check("PWA：manifest にアイコン2つと名前がある", mf.name === "悪質商法みやぶり" && mf.icons.length >= 2 && mf.start_url === "./"); }
 
 // ---- 3. ブラウザで遊ぶ ----
@@ -326,7 +327,7 @@ try {
   }
   // 実績・このゲームについて
   await p.goto(url); await p.waitForTimeout(150); await p.click("#go-ach");
-  check("実績は14個で、腕前・集める・続けるの3つの組・まだのものは いま/目標", await p.locator(".ach").count() === 14 && await p.locator(".agrp").count() === 3 && await p.locator(".ach.got").count() >= 3 && await p.locator(".ach:not(.got) .bar").count() >= 5);
+  check("実績は16個で、腕前・集める・続けるの3つの組・まだのものは いま/目標", await p.locator(".ach").count() === 16 && await p.locator(".agrp").count() === 3 && await p.locator(".ach.got").count() >= 3 && await p.locator(".ach:not(.got) .bar").count() >= 5);
   check("達成した実績は ✓ の文字も付く（色だけで分けない）", (await p.textContent(".ach.got b")).startsWith("✓"));
   await p.click("#back"); await p.click("#f-about");
   check("このゲームについて：法律相談ではないこと・188・出典", (await p.textContent("#about")).includes("法律相談ではありません") && await p.locator("#about a").count() >= 5);
@@ -394,6 +395,64 @@ try {
     await ctx.close();
   }
 
+  // 1問を深くする（shared-workflows routines/game-dev.md「1問を深くする」）：自信をかける・復習。2つ目の判断は、もとからある「手口は？」「どうする？」「クーリング・オフ」なので2段目は足さない
+  {
+    const q = await newPage(); await closeHow(q);
+    const tags = ["a:tk1", "j:j1", "n:tk1"];
+    await q.evaluate((t) => __mb.save((s) => { s.runs.p = { mode: "p", date: __mb.todayKey(), list: t, res: [], cur: null, id: "dp" }; }), tags);
+    await q.evaluate(() => { Depth.runStart(); __mb.play("p"); });
+    const sb = await q.$eval("#dp-sure", (b) => [b.getBoundingClientRect().height, b.getAttribute("aria-pressed"), b.textContent]);
+    check("自信のボタン：高さ44px以上・はじめは押していない", sb[0] >= 44 && sb[1] === "false", sb.join(","));
+    await q.click("#dp-sure");
+    check("自信のボタンを押すと ✓ が出る（色だけで分けない）", (await q.getAttribute("#dp-sure", "aria-pressed")) === "true" && (await q.textContent("#dp-sure")).includes("✓"));
+    await q.click(`.ch[data-j="${await wrongIdx(q)}"]`);
+    check("自信ありでまちがえると、知らせに「思いこみ」と出て、自信は変えられない", (await q.textContent("#msg")).includes("思いこみ") && await q.locator("#dp-sure:disabled").count() === 1);
+    check("まちがえたその時に復習へ入る（解き終えずにやめても残る）", await q.evaluate(() => { const d = JSON.parse(localStorage.getItem("miyaburi-depth") || "{}"); return !!(d.rv && d.rv[__mb.cur().tag]); }));
+    await q.click(`.ch[data-j="${await ansIdx(q)}"]`); await q.waitForSelector(".verdict");
+    check("正解の画面に、自信ありでまちがえたことが出る", (await q.textContent(".verdict")).includes("自信ありでまちがえた"));
+    await q.click("#next"); await solve(q); await q.click("#next"); await solve(q); await q.click("#next"); await q.waitForTimeout(150);
+    check("終えた直後の結果に「自信ありの当たり」が出る", (await q.textContent("#surestat")).includes("0/1"));
+    const dp = await q.evaluate(() => JSON.parse(localStorage.getItem("miyaburi-depth") || "{}"));
+    check("まちがえた・ヒントを使った問題だけ復習に入る", Object.keys(dp.rv || {}).join() === "a:tk1", Object.keys(dp.rv || {}).join(","));
+    const n = await q.evaluate(() => { __mb.save((s) => { s.runs.p = { mode: "p", date: __mb.todayKey(), list: ["a:tk1", "j:j1"], res: [], cur: null, id: "sc1" }; }); __mb.play("p"); __mb.sureCount(true); __mb.sureCount(true); return __mb.load().runs.p.ds; });
+    check("「自信あり」の数は1問につき1回だけ（2つのタブで同じ問題を当てても2回足さない）", n && n.n === 1 && n.ok === 1, JSON.stringify(n));
+    await q.evaluate(() => { __mb.save((s) => { s.runs.p = null; }); const d = JSON.parse(localStorage.getItem("miyaburi-depth")); for (const k in d.rv) d.rv[k].due = "2026-01-01"; localStorage.setItem("miyaburi-depth", JSON.stringify(d)); });
+    await q.goto(url); await q.waitForTimeout(150);
+    check("日の来た復習があると、ホームに「復習 1件」", (await q.textContent("#go-r")).includes("復習 1件"));
+    const before = await mem(q);
+    await q.click("#go-r");
+    check("復習の画面は「復習」と出る・同じ問題", (await q.textContent("header")).includes("復習") && await q.evaluate(() => __mb.cur().tag) === "a:tk1");
+    await solve(q); await q.click("#next"); await q.waitForTimeout(150);
+    const after = await mem(q), dp2 = await q.evaluate(() => JSON.parse(localStorage.getItem("miyaburi-depth")));
+    check("復習を終えると結果は「復習」・今日の記録・連続は増えない・シェアと Ko-fi は出ない", (await q.textContent("h1")).includes("復習") && JSON.stringify(after.days) === JSON.stringify(before.days) && JSON.stringify(after.adays) === JSON.stringify(before.adays) && await q.locator("#share").count() === 0 && await q.locator(".kofi").count() === 0);
+    check("復習で一度で正解すると、次は3日後へ進む", Object.values(dp2.rv).every((x) => x.s === 1 && x.due > TODAY));
+    await q.goto(url); await q.waitForTimeout(150);
+    check("復習を終えたら、ホームの「復習」は消える", await q.locator("#go-r").count() === 0);
+    await q.evaluate(() => { const d = JSON.parse(localStorage.getItem("miyaburi-depth")); d.rv["a:nai"] = { s: 0, due: "2026-01-01", t: 1 }; d.rv["constructor"] = { s: 0, due: "2026-01-01", t: 2 }; d.rv["x:1|2"] = { s: 0, due: "2026-01-01", t: 3 }; localStorage.setItem("miyaburi-depth", JSON.stringify(d)); });
+    await q.goto(url); await q.waitForTimeout(150);
+    check("作り直せない鍵（無い相談・constructor・形の合わない鍵）は復習に数えず、ホームも出る", await q.locator("#go-d").count() === 1 && await q.locator("#go-r").count() === 0);
+    // 別のタブで先に進んだ古い画面は、復習の段を戻さない
+    { const tq = "j:j1";
+      await q.evaluate((t) => { __mb.save((s) => { s.runs.p = { mode: "p", date: __mb.todayKey(), list: [t, "a:tk1"], res: [], cur: null, id: "dq" }; }); __mb.play("p"); }, tq);
+      await q.evaluate((t) => { __mb.save((s) => { s.runs.p.res.push({ m: 0 }); s.runs.p.cur = null; }); const d = JSON.parse(localStorage.getItem("miyaburi-depth")); d.rv[t] = { s: 2, due: "2099-01-01", t: 9 }; localStorage.setItem("miyaburi-depth", JSON.stringify(d)); }, tq);
+      await q.click("#hint"); await q.waitForTimeout(80);
+      check("別のタブで先に進んだ古い画面でヒントを押しても、復習の段は戻らない", await q.evaluate((t) => JSON.parse(localStorage.getItem("miyaburi-depth")).rv[t].s, tq) === 2);
+    }
+    // 復習の途中でヒントを使って日の来た問題が0になっても・日が替わっても、ホームの「復習の続きから」で戻れる
+    { const rk = Object.keys(dp2.rv)[0];
+      await q.evaluate((k) => { __mb.save((s) => { s.runs.p = null; }); const d = JSON.parse(localStorage.getItem("miyaburi-depth")); d.rv = { [k]: { s: 0, due: "2026-01-01", t: 3 } }; localStorage.setItem("miyaburi-depth", JSON.stringify(d)); }, rk);
+      await q.goto(url); await q.waitForTimeout(150); await q.click("#go-r"); await q.click("#hint");
+      await q.evaluate(() => __mb.save((s) => { s.runs.r.date = "2026-01-02"; }));
+      await q.goto(url); await q.waitForTimeout(150);
+      check("復習の途中でヒントを使って日の来た問題が0になっても・日が替わっても、ホームの「復習の続きから」で戻れる", ((await q.locator("#go-r").count()) ? await q.textContent("#go-r") : "").includes("続きから"));
+      if (await q.locator("#go-r").count()) { await q.click("#go-r"); check("復習の続きは同じ問題・使ったヒントはそのまま", await q.evaluate(() => __mb.cur().tag) === rk && await q.evaluate(() => __mb.cur().hints) === 1); }
+    }
+    // 実績：自信ありで10回当てる・復習で5件覚えた
+    { const t = await q.evaluate(() => { const d = JSON.parse(localStorage.getItem("miyaburi-depth")); d.sure = 12; d.sureOk = 10; d.learned = 5; localStorage.setItem("miyaburi-depth", JSON.stringify(d)); return __mb.achGot(__mb.load()); });
+      check("実績「たしかの目」（自信ありで10回当てる）・「覚えなおし」（復習で5件覚えた）が取れる", t.includes("sure10") && t.includes("learn5"), t.join(",")); }
+    await q.context().close();
+  }
+
   // とことんの並び（何百回）：1つの並びの中で同じ問題を出さない・つなぎ目で同じ問題を続けない
   {
     const q = await newPage(); await closeHow(q);
@@ -455,9 +514,11 @@ try {
   }
 } catch (e) { check("ブラウザでの検査が最後まで動く", false, e.stack.split("\n").slice(0, 3).join(" ")); }
 
+// 深さの部品（shared-workflows template/qa/depth-check.mjs）
+{ const e = await checkDepth(readFileSync(path.join(root, "depth.js"), "utf8")); check("depth.js（自信をかける・復習）の動き", e.length === 0, e.join(" / ")); }
 // 引き継ぎコード（shared-workflows template/qa/transfer-check.mjs）
 try {
-  const sample = { "miyaburi-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-07": { m: [0, 1, 0, 0, 2] } }, hdays: {}, adays: {}, dex: { tenken: 2, okuri: 1 }, co: 3, miss: ["a:tk1"], runs: {}, kofi: {}, ach: {}, ebest: 7, edone: [], t: 1 }) };
+  const sample = { "miyaburi-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-07": { m: [0, 1, 0, 0, 2] } }, hdays: {}, adays: {}, dex: { tenken: 2, okuri: 1 }, co: 3, miss: ["a:tk1"], runs: {}, kofi: {}, ach: {}, ebest: 7, edone: [], t: 1 }), "miyaburi-depth": JSON.stringify({ v: 1, rv: { "a:tk1": { s: 1, due: "2026-11-20", t: 5 } } }) }; // 復習の記録も引き継ぐかを見る
   await checkTransfer({ browser, url, game: "akushitsu-miyaburi", sample, check, open: async (pg) => { if (await pg.locator("#howto[open]").count()) await pg.click("#howto-ok"); } });
 } catch (e) { check("引き継ぎの検査が最後まで動く", false, e.message.split("\n")[0]); }
   { const c = await browser.newContext(); const r = await c.newPage(); const big = []; // 題が h1{flex:1} で縦に伸び（伸びない形と比べて4pxより高ければ失敗）、iPad の縦で大きなすき間が出た（shared-workflows incidents/2026-11-07-title-stretched.md）
