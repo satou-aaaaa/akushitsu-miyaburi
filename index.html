@@ -170,7 +170,7 @@ dialog#howto h2{margin:0 0 10px;letter-spacing:.1em}
 dialog#howto ol{padding-left:1.3em;margin:0 0 12px;line-height:1.8}
 dialog#howto p{margin:0 0 10px;font-size:.9rem;line-height:1.7;color:var(--ink2)}
 dialog#howto a{color:var(--shu2);min-height:44px;display:inline-flex;align-items:center}
-.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:12px;font-weight:700;z-index:9;box-shadow:0 6px 20px #0005;max-width:90%;text-align:center;font-size:1rem}
+.toast{pointer-events:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:12px;font-weight:700;z-index:9;box-shadow:0 6px 20px #0005;max-width:90%;text-align:center;font-size:1rem}
 footer{margin-top:auto;text-align:center;font-size:.8rem;color:var(--ink2);display:flex;gap:4px 14px;justify-content:center;flex-wrap:wrap}
 footer a{color:var(--ink2);min-height:44px;display:inline-flex;align-items:center}
 .help{background:var(--paper);border:2px solid var(--mo);border-radius:14px;padding:.6rem .9rem;font-size:.88rem;line-height:1.7;text-align:left}
@@ -674,6 +674,7 @@ function choose(j) {
     if (r.rev && m === 0) s.miss = s.miss.filter((t) => t !== P.tag); // おさらいで一度で正解したら、おさらいから外す
   });
   const st = starsOf(m), r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length;
+  if ($("quit") && r && r.mode === "e") $("quit").textContent = `ここで降りる（${r.res.length}件で終える）`; // 正解した分も数える
   document.querySelectorAll(".ch").forEach((b) => { b.disabled = true; if (+b.dataset.j === P.ans) { b.classList.add("ok"); b.setAttribute("aria-label", P.opts[P.ans] + "（正解）"); } });
   if (P.type === "d") $("mcal").outerHTML = mcal(P, true);
   if ($("hint")) $("hint").disabled = true;
