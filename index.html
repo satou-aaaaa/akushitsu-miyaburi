@@ -533,7 +533,7 @@ function home() {
   for (const m of Object.keys(s.runs)) { const r = s.runs[m]; if (m !== "p" && r && doneOf(r)) { MODE = m; return finish(); } }
   const late = lateDays(s, k), ag = achGot(s).length, tip = tipOf(k), nk = Object.keys(s.dex).filter((x) => s.dex[x] > 0).length;
   const rd = s.runs.d && s.runs.d.date === k ? s.runs.d : null, rh = s.runs.h && s.runs.h.date === k ? s.runs.h : null, re = s.runs.e || null;
-  const st = streak(s.days), rv = Depth.count(), rr = s.runs.r && !doneOf(s.runs.r) ? s.runs.r : null;
+  const st = streak(s.days), rv = Depth.count();
   app.innerHTML = `
     <h1 class="title"><small>まちの相談窓口</small>悪質商法<span>みやぶり</span></h1>
     <p class="lead" data-a11y-say>相談に来た人の話から、手口を見抜いて、どうすればよいかを選ぶ。<br>だれでも同じ1日5件。</p>
@@ -541,7 +541,7 @@ function home() {
     ${done ? `<div class="share">今日の結果　${done.m.map(sq).join("")}</div>` : ""}
     <button class="main" id="go-d">${done ? "今日の結果を見る" : rd ? `続きから（${rd.res.length + 1}件目）` : `今日の5件 <small>第${dayNo(k)}回</small>`}</button>
     <button class="main alt" id="go-e">${re ? `とことんの続きから（${re.res.length + 1}件目）` : "とことん：何件見抜ける？"}${s.ebest ? ` <small>自己ベスト ${s.ebest}件</small>` : ""}</button>
-    ${rr ? `<button class="main alt" id="go-r">復習の続きから（${rr.res.length + 1}件目）</button>` : rv ? `<button class="main alt" id="go-r">復習 ${rv}件 <small>まちがえた相談がもどってきた</small></button>` : ""}
+    ${s.runs.r && !doneOf(s.runs.r) ? `<button class="main alt" id="go-r">復習の続きから（${s.runs.r.res.length + 1}件目）</button>` : rv ? `<button class="main alt" id="go-r">復習 ${rv}件 <small>まちがえた相談がもどってきた</small></button>` : ""}
     <button class="main alt" id="go-h">${hdone ? "上級の結果を見る" : rh ? "上級の続きから" : "上級：むずかしい3件（ヒントなし）"}</button>
     <div class="row"><button class="sub" id="go-p">練習（何度でも）</button><button class="sub" id="go-dex">手口帳 ${nk}/${G.TE.length}</button></div>
     <div class="row"><button class="sub" id="go-cal" aria-label="カレンダー${late.length ? `（あとから遊べる日 ${late.length}）` : ""}">カレンダー${late.length ? ` <span class="badge">▶${late.length}</span>` : ""}</button><button class="sub" id="go-ach">実績 ${ag}/${ACH.length}</button></div>
