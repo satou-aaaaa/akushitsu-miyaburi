@@ -267,6 +267,29 @@ try {
   await p.click("#quit"); await p.waitForTimeout(150);
   check("「ここで降りる」で終わり、一度で正解した数（2件）が自己ベスト", (await mem(p)).ebest === 2 && (await p.textContent("#eres")).includes("2件"));
   {
+    // 正解した直後（次へを押す前）でも「ここで降りる」で終われ、その1件が数に入る（前は cur.done のとき押しても何も起きなかった）
+    const q = await newPage(); await closeHow(q);
+    await q.click("#go-e"); await solve(q);
+    check("正解した直後の「ここで降りる」のボタンの数は、正解した1件を入れた数", (await q.textContent("#quit")).includes("1件で終える"), await q.textContent("#quit"));
+    await q.click("#quit"); await q.waitForTimeout(150);
+    check("とことんで正解した直後に「ここで降りる」を押すと結果の画面になり、正解した1件が数に入る", await q.locator("#eres").count() === 1 && (await q.textContent("#eres")).includes("1件") && (await mem(q)).ebest === 1 && !(await mem(q)).runs.e);
+    await q.context().close();
+  }
+  {
+    // 保存できないブラウザでは帯で知らせ、保存できるようになったら消す
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    await ctx.addInitScript(() => { window.__origSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; });
+    const q = await newPage(390, ctx); await closeHow(q);
+    await q.click("#go-e"); await solve(q);
+    const n1 = await q.locator("#savewarn").count(); await q.waitForTimeout(2000);
+    const n2 = await q.locator("#savewarn").count();
+    check("保存に失敗すると、帯（#savewarn）がちょうど1つ出て、2秒たっても残る", n1 === 1 && n2 === 1, `${n1},${n2}`);
+    await q.evaluate(() => { Storage.prototype.setItem = window.__origSetItem; });
+    await q.click("#next"); await solve(q);
+    check("保存できるようになったら、帯（#savewarn）が消える", await q.locator("#savewarn").count() === 0);
+    await ctx.close();
+  }
+  {
     // 古いタブで終えた回を、別のタブがもう一度終えても書き戻さない
     const q = await newPage(); await closeHow(q);
     await q.evaluate(() => { const s = __mb.load(); s.ebest = 2; s.edone = ["old1"]; s.runs.e = { mode: "e", date: __mb.todayKey(), list: __mb.endlessList(), res: [{ m: 0 }], cur: null, first: 9, miss: 0, id: "old1" }; localStorage.setItem("miyaburi-v1", JSON.stringify(s)); });
@@ -442,6 +465,10 @@ try {
       const v = await r.evaluate(() => { const e = [...document.querySelectorAll(".title")].find((x) => x.offsetParent); if (!e) return null; const h = e.getBoundingClientRect().height; const f = e.style.flex; e.style.flex = "none"; const n = e.getBoundingClientRect().height; e.style.flex = f; return h - n; });
       if (v === null || v > 4) big.push(`${w}x${h}:${v === null ? "題なし" : "+" + Math.round(v) + "px"}`); }
     check("ホームの題は縦長の画面でも縦に伸びない（820×1180・390×844・1280×800）", big.length === 0, big.join(" ")); await c.close(); }
+{ // 知らせ（.toast）は下のボタンを塞がない（shared-workflows incidents/2026-11-17-known-game-bugs-spread.md）
+  const pt = await browser.newPage(); await pt.goto(url);
+  check("知らせ（.toast）が出ていても、その下のボタンを押せる（pointer-events:none）", await pt.evaluate(() => { const d = document.createElement("div"); d.className = "toast"; document.body.appendChild(d); const v = getComputedStyle(d).pointerEvents; d.remove(); return v === "none"; }));
+  await pt.close(); }
 await browser.close();
 server.close();
 check("画面のエラーが無い", errors.length === 0, errors.slice(0, 3).join(" | "));
