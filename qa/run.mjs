@@ -47,6 +47,9 @@ const len = (s) => [...String(s)].length;
   const yn = G.JUDGE.filter((j) => j.y).length;
   check("できる・できないの判断は、どちらも3割以上（当て推量で取れない）", yn / G.JUDGE.length >= 0.3 && yn / G.JUDGE.length <= 0.7, `${yn}/${G.JUDGE.length}`);
   const h = [G.CASES.filter((c) => c.h).length, G.JUDGE.filter((j) => j.h).length];
+  // 2026-11-21 おもしろさの見直し：「どうする？」の正解だけが長く、長い選び肢を選ぶと8割当たった（shared-workflows routines/game-fun.md）
+  const longest = G.CASES.filter((c) => len(c.o[0]) > Math.max(...c.o.slice(1).map(len))).length;
+  check("「どうする？」の正解だけがいちばん長い相談は2割以下（長さで当たらない）", longest / G.CASES.length <= 0.2, `${longest}/${G.CASES.length}`);
   check("上級の相談・判断がそれぞれ5件以上", h[0] >= 5 && h[1] >= 5, h.join(","));
 }
 {
