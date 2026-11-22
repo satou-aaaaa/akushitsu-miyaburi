@@ -15,6 +15,7 @@ import { checkDepth } from "./depth-check.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const results = [];
 const check = (name, ok, detail = "") => results.push({ name, ok: !!ok, detail: String(detail).slice(0, 400) });
+const firstClose = async (q) => { if (await q.locator("#howto[open]").count()) await q.click("#howto-ok"); if (await q.locator("#core-coach").count()) { await q.evaluate(() => Core.coach.leave()); await q.waitForTimeout(100); } }; // はじめての練習の吹き出しをやめてホームへ（sync-template の migrateFirstQa が足した）
 const G = createRequire(import.meta.url)(path.join(root, "data.js"));
 const len = (s) => [...String(s)].length;
 
@@ -156,7 +157,7 @@ async function newPage(w = 390, ctx) {
   await p.goto(url); await p.waitForTimeout(200);
   return p;
 }
-const closeHow = async (p) => { if (await p.locator("#howto[open]").count()) await p.click("#howto-ok"); };
+const closeHow = async (p) => { await firstClose(p); };
 const ansIdx = (p) => p.evaluate(() => __mb.cur().P.ans);
 const wrongIdx = (p) => p.evaluate(() => { const c = __mb.cur(); return c.P.opts.findIndex((_, j) => j !== c.P.ans && !c.wrong.includes(j)); });
 const mem = (p) => p.evaluate(() => JSON.parse(localStorage.getItem("miyaburi-v1") || "{}"));
@@ -179,17 +180,17 @@ try {
   {
     // cancel（Esc）のその場で保存する。close を待たずに見る。保存に失敗したら close でもう一度保存する（CodeRabbit の指摘）
     const q = await newPage();
-    const atCancel = await q.evaluate(() => { const d = document.getElementById("howto"); d.dispatchEvent(new Event("cancel")); return JSON.parse(localStorage.getItem("miyaburi-v1") || "{}").tut === true; });
+    const atCancel = await q.evaluate(() => { localStorage.clear(); const d = document.getElementById("howto"); if (!d.open) d.showModal(); d.dispatchEvent(new Event("cancel")); return JSON.parse(localStorage.getItem("miyaburi-v1") || "{}").tut === true; });
     check("遊び方を Esc で閉じたその場（close の前）に「見た」を保存する", atCancel);
     await q.context().close();
     const q2 = await newPage();
-    const retried = await q2.evaluate(() => { const ls = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; const d = document.getElementById("howto"); d.dispatchEvent(new Event("cancel")); Storage.prototype.setItem = ls; const before = JSON.parse(localStorage.getItem("miyaburi-v1") || "{}").tut === true; d.close(); return new Promise((res) => setTimeout(() => res(!before && JSON.parse(localStorage.getItem("miyaburi-v1") || "{}").tut === true), 100)); });
+    const retried = await q2.evaluate(() => { const ls = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; localStorage.clear(); const d = document.getElementById("howto"); if (!d.open) d.showModal(); d.dispatchEvent(new Event("cancel")); Storage.prototype.setItem = ls; const before = JSON.parse(localStorage.getItem("miyaburi-v1") || "{}").tut === true; d.close(); return new Promise((res) => setTimeout(() => res(!before && JSON.parse(localStorage.getItem("miyaburi-v1") || "{}").tut === true), 100)); });
     check("Esc のときの保存に失敗しても、閉じたときに「見た」を保存し直す", retried);
     await q2.context().close();
   }
   const p = await newPage();
-  check("はじめて開くと遊び方が出る", await p.locator("#howto[open]").count() === 1);
-  await p.click("#howto-ok");
+  check("はじめて開くと遊び方が出る", await p.locator("#core-coach").waitFor({ timeout: 3000 }).then(() => true, () => false));
+  await firstClose(p);
   check("ホームに今日の心得と、こまったときの 188 が出る", (await p.textContent("#tip")).includes("今日の心得") && (await p.textContent(".help")).includes("188"));
   check("はじめての日から上級・とことん・練習を押せる（鍵なし）", await p.locator("#go-h:not([disabled])").count() === 1 && await p.locator("#go-e:not([disabled])").count() === 1 && await p.locator("#go-p:not([disabled])").count() === 1);
 
@@ -522,7 +523,7 @@ try {
 // 引き継ぎコード（shared-workflows template/qa/transfer-check.mjs）
 try {
   const sample = { "miyaburi-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-07": { m: [0, 1, 0, 0, 2] } }, hdays: {}, adays: {}, dex: { tenken: 2, okuri: 1 }, co: 3, miss: ["a:tk1"], runs: {}, kofi: {}, ach: {}, ebest: 7, edone: [], t: 1 }), "miyaburi-depth": JSON.stringify({ v: 1, rv: { "a:tk1": { s: 1, due: "2026-11-20", t: 5 } } }) }; // 復習の記録も引き継ぐかを見る
-  await checkTransfer({ browser, url, game: "akushitsu-miyaburi", sample, check, open: async (pg) => { if (await pg.locator("#howto[open]").count()) await pg.click("#howto-ok"); } });
+  await checkTransfer({ browser, url, game: "akushitsu-miyaburi", sample, check, open: async (pg) => { await firstClose(pg); } });
 } catch (e) { check("引き継ぎの検査が最後まで動く", false, e.message.split("\n")[0]); }
   { const c = await browser.newContext(); const r = await c.newPage(); const big = []; // 題が h1{flex:1} で縦に伸び（伸びない形と比べて4pxより高ければ失敗）、iPad の縦で大きなすき間が出た（shared-workflows incidents/2026-11-07-title-stretched.md）
     for (const [w, h] of [[820, 1180], [390, 844], [1280, 800]]) { await r.setViewportSize({ width: w, height: h }); await r.goto(url); await r.waitForTimeout(200); await r.keyboard.press("Escape"); await r.waitForTimeout(100);
